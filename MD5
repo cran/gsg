@@ -1,0 +1,12 @@
+f56d5a7e090839d48c46f92c768fe8f9 *DESCRIPTION
+fac4f6c4b88633d8c3b57644c4273889 *NAMESPACE
+6f297b41c22172981a9f28106487c401 *R/fitness.landscape.R
+e835db686439953c1becaf9d478a9baa *R/gam.gradients.R
+abb4de392df9d5242fd36e5934a6797d *R/moments.differentials.R
+6cfbdb7a819a537ac7b1e38c6ecc3bc0 *data/humanNeonatal.RData
+d399c46e6db0699ce4559ec8637a4d59 *inst/doc/gsg_notes.pdf
+2db02401c369f58a49183f5293408346 *man/fitness.landscape.Rd
+5d098d59107229a0a7c010f912ede701 *man/gam.gradients.Rd
+c62e6078f0f1896b2c9e9addee95fc4c *man/gsg-package.Rd
+e3bf701a961677200b33ab2e3f117d5f *man/humanNeonatal.Rd
+998e5c72fe283a86c3c65143e1cdd733 *man/moments.differentials.Rd

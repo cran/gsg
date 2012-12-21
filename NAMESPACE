@@ -1,0 +1,13 @@
+export(fitness.landscape, gam.gradients,moments.differentials)
+importFrom(mgcv, gam, predict.gam)
+
+
+
+
+
+
+
+
+
+
+

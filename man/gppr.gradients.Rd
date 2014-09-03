@@ -1,5 +1,5 @@
-\name{gam.gradients}
-\alias{gam.gradients}
+\name{gppr.gradients}
+\alias{gppr.gradients}
 
 \title{
 A function to calculate selection gradients from generalized additive model-based characterizions of fitness functions.
@@ -10,14 +10,14 @@ gam.gradients uses numerical approximations to the first and second order partia
 }
 
 \usage{
-gam.gradients(mod, phenotype, covariates = NULL, standardized = FALSE, 
+gppr.gradients(mod, phenotype, covariates = NULL, standardized = FALSE, 
           se.method = "boot.para", n.boot = 1000, 
-          parallel = "no", ncpus = 1, refit.smooth = FALSE)
+          parallel = "no", ncpus = 1)
 }
 
 \arguments{
   \item{mod}{
-a gam object.  Must include predictor variables specified by \code{phenotype}
+a fitted object produced by \link{gppr}.  Must include predictor variables specified by \code{phenotype}
 }
   \item{phenotype}{
 a vector of one or two character strings specifying predictor variables in selection gradients are to be calculated
@@ -40,9 +40,6 @@ whether or not to use parallel processing to speed up computation of bootstrap s
   \item{ncpus}{
 the number of cpus to be used for parallel processing of bootstrap standard errors.  Only used under linux.
 }
-  \item{refit.smooth}{
-whether or not to re-estiamte smoothing parameters when \code{gam} objects are refitted in bootstrapping and permutation algorithms
-}
 }
 
 
@@ -50,7 +47,7 @@ whether or not to re-estiamte smoothing parameters when \code{gam} objects are r
 A list. Element 1 is a table of estimates, standard errors and P-values, and element 2 contains the bootstrap or permutation values.
 }
 \references{
-M.B. Morrissey and K. Sakrejda. 2013. Unification of regression-based methods for the analysis of natural selection. Evolution 67: 2094-2100.
+M.B. Morrissey. in prep.
 }
 \author{
 Michael Morrissey \email{michael.morrissey@st-andrews.ac.uk}
@@ -60,28 +57,20 @@ Michael Morrissey \email{michael.morrissey@st-andrews.ac.uk}
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
 \seealso{
-\code{\link{gam.gradients},\link{moments.differentials},\link{gam}}
+\code{\link{gam.gradients},\link{gppr}}
 }
 \examples{
-# simulated data (stabilizing selection)
-z<-rnorm(200,0,2)
-W<-rpois(200,exp(1-0.3*z^2))
-d<-as.data.frame(list(W=W,z=z))
+# simulated data (two traits, stabilizing selection on trait 1)
+n<-250
+z<-cbind(rnorm(n,0,1),rnorm(n,0,1))
+W<-rpois(n,exp(2-0.6*z[,1]^2))
+d<-as.data.frame(cbind(W,z))
+names(d)<-c("W","z1","z2")
 
-# characterize the fitness function
-library(mgcv)
-ff<-gam(W~s(z),family='poisson',data=d)
+fit.func<-gppr(y="W",xterms=c("z1","z2"),data=d,family="poisson",
+   nterms=2,max.terms=2)
 
-# derive selection gradients
-gam.gradients(mod=ff,phenotype="z",se.method='n',standardized=FALSE)$ests
-
-# or gam.gradients() can be used to do the
-# equivalent of a basic Lande and Arnold
-# 1983 regression
-
-LA<-gam(W~z+I(z^2),family='gaussian',data=d)
-gam.gradients(mod=LA,phenotype="z",se.method='n',standardize=FALSE)$ests
-
+gppr.gradients(mod= fit.func,phenotype=c("z1","z2"),se.method='n',standardize=FALSE)
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.

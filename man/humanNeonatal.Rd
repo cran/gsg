@@ -13,7 +13,7 @@ Schluter, D. 1988. Estimating the form of natural selection on a quantitative tr
 
 Schluter, D., and D. Nychka. 1994. Exploring fitness surfaces.  The american Naturalist 143: 597-616.
 
-Morrissey, M. B., and K. Sakrejda. in prep.
+M.B. Morrissey and K. Sakrejda. 2013. Unification of regression-based methods for the analysis of natural selection. Evolution 67: 2094-2100.
 }
 
 \usage{humansNeonatal}

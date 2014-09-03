@@ -55,40 +55,34 @@ fitness.landscape <- function(
 	para.boot.fit.land<-function(data, original, mod, points, phenotype,covariates){
 
 		simulate.gam.gsg<-function(mod){
-			sim.lin.pred<-predict(mod,type="response")
+			sim.lin.pred<-predict(mod)
 			s<-NULL
 			if(mod$family[[1]]=='poisson'&mod$family[[2]]=='log') {
-#				s<-rpois(length(sim.lin.pred),exp(sim.lin.pred))
-				s<-rpois(length(sim.lin.pred),sim.lin.pred)
+				s<-rpois(length(sim.lin.pred),exp(sim.lin.pred))
 			}
 			if(mod$family[[1]]=='binomial') {
-#				s<-rbinom(length(sim.lin.pred),1,inv.logit(sim.lin.pred))
-				s<-rbinom(length(sim.lin.pred),1,sim.lin.pred)
+				s<-rbinom(length(sim.lin.pred),1,inv.logit(sim.lin.pred))
 			}		
 			s
 		}
 
 		d <- as.data.frame(data)
-    	d[[attr(attr(mod$terms,'factors'),'dimnames')[[1]][1]]]<-
-    	                                     simulate.gam.gsg(mod)
+		p<-simulate.gam.gsg(mod)
+    	d[[attr(attr(mod$terms,'factors'),'dimnames')[[1]][1]]]<-p
 
+fam<-mod$family[[1]]
     	mod.prime <- NULL
 		if(refit.smooth){
 		  mod.prime <- gam(
         		as.formula(mod$formula),
         		data=d,
         		family=mod$family,
-        		start=mod$coefficients
     		  )
 		}else{
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients,
-        		sp=mod$sp
-    		  )
+		  mod.prime <- gam(as.formula(mod$formula),data=d,family=mod$family,sp=mod$sp )
     	}
+#print(c(mean(predict(mod,type="response")),mean(predict(mod.prime,type="response")),mean(d$nns)))
+#print(c(mean(predict(mod,type="response")),mean(predict(mod.prime,type="response")),mean(d$nns)))
 
     	l <- fit.land(mod=mod.prime, points=points, 
     			phenotype=phenotype,covariates=covariates)

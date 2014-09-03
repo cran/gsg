@@ -25,7 +25,9 @@ Michael Morrissey
 Maintainer: Michael Morrissey \email{michael.morrissey@st-andrews.ac.uk}
 }
 \references{
-M.B. Morrissey and K. Sakrejda. in prep.
+M.B. Morrissey and K. Sakrejda. 2013. Unification of regression-based methods for the analysis of natural selection. Evolution 67: 2094-2100.
+
+M.B. Morrissey. in prep.
 }
 
 \keyword{ package }

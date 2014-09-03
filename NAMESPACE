@@ -1,6 +1,8 @@
-export(fitness.landscape, gam.gradients,moments.differentials)
-importFrom(mgcv, gam, predict.gam)
-
+export(fitness.landscape, gam.gradients,moments.differentials,gppr,gppr.gradients)
+importFrom(mgcv, gam, predict.gam, negbin)
+import(boot)
+import(numDeriv)
+import(mvtnorm)
 
 
 

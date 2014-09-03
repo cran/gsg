@@ -1,5 +1,5 @@
 
-gam.gradients <- function(
+gppr.gradients <- function(
     mod,
     phenotype,
     covariates=NULL,
@@ -7,101 +7,78 @@ gam.gradients <- function(
     se.method='boot.para',
     n.boot=1000,
     parallel="no",
-    ncpus=1,
-    refit.smooth=FALSE
+    ncpus=1
 ) {
 	
-	## sub-functions for gam.gradients()
+  ## sub-functions for gam.gradients()
 	
-	Wbar <- function(x, mod, phenotype,covariates) {
-    		new.d <- as.data.frame(mod$model[,c(phenotype,covariates)])
-    		names(new.d)<-c(phenotype,covariates)
-    		new.d2<-new.d
-    		for (i in 1:length(x)) {
-    		    new.d[,as.character(phenotype[i])] <-
-    		    new.d[,as.character(phenotype[i])]+x[i]
-    		}
-    
-    		p <- predict.gam(
-			   object=mod,
-    	 	   newdata=new.d,
-    	 	   newdata.guaranteed=TRUE,
-    	 	   type="response"
-    		)
-    	return(mean(p))
-	}
+  Wbar <- function(x, mod, phenotype,covariates) {
+    new.d <- as.data.frame(mod$data[,
+            c(phenotype,covariates)])
+    names(new.d)<-c(phenotype,covariates)
+    new.d2<-new.d
+    for (i in 1:length(x)) {
+      new.d[,as.character(phenotype[i])] <-
+         new.d[,as.character(phenotype[i])]+x[i]
+    }
+    p <- predict(
+             mod,newdata=new.d,
+             type="response")
+    return(mean(p))
+  }
 
-	gradients <- function(m, phenotype, covariates) {
-    	nTraits = length(phenotype)
-    	first.derivatives <- grad(func=Wbar, x=rep(0, nTraits), 
-    	         mod=m, phenotype=phenotype, covariates=covariates)
-    	second.derivatives <- hessian(func=Wbar, x=rep(0, nTraits), 
-    	         mod=m, phenotype=phenotype, covariates=covariates)
-    	denom <- Wbar(x=rep(0,nTraits), mod=m, phenotype=phenotype,
-    	         covariates=covariates)
-    	
-    	beta <- first.derivatives  / denom
-    	gamma <- second.derivatives / denom
-    	
-    	if(standardized){
-    		sds<-apply(as.matrix(mod$model[,phenotype]),2,sd)
-    		beta<-beta*sds
-    		gamma<-gamma*outer(sds,sds)
-    	}
-    	return( list(
-    	    beta  = beta,
-    	    gamma = gamma
-    	))
-	}
+  gradients <- function(m, phenotype, covariates) {
+    nTraits = length(phenotype)
 
+    sds<-apply(as.matrix(mod$data[,phenotype]),2,sd)
+    h<-sds*0.02
+    derivs<-finite.dif(Wbar,x=rep(0, nTraits), h=h,
+      mod=m, phenotype=phenotype, covariates=covariates)
+
+    beta<-derivs$grad.est/derivs$mu
+    gamma<-derivs$hessian.est/derivs$mu
+
+    	
+    if(standardized){
+    	sds<-apply(as.matrix(mod$gen$data[,phenotype]),2,sd)
+    	beta<-beta*sds
+    	gamma<-gamma*outer(sds,sds)
+    }
+    return(list(beta=beta,gamma=gamma))
+  }
+
+	# case bootstrap
 	boot.gradients <- function(data, original, mod, 
 	                             phenotype,covariates) {
-  		d <- as.data.frame(data)[original,]
+    d <- as.data.frame(data)[original,]
 
-		mod.prime <- NULL
-		if(refit.smooth){
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients
-    		  )
-		}else{
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients,
-        		sp=mod$sp
-    		  )
-    		}
+    mod.prime <- gppr(
+        y=mod$gen$y,
+        xterms=mod$xterms,
+        data=d,
+        family=mod$family[[1]],
+        nterms=mod$nterms,
+        max.terms=mod$max.terms,
+        tol=mod$tol
+    )
 
-    	g <- gradients(mod.prime, phenotype,covariates)
+    g <- gradients(mod.prime, phenotype,covariates)
 
-    	return(c(g$beta,diag(g$gamma),
-    	                         g$gamma[upper.tri(g$gamma)]))
+    return(c(g$beta,diag(g$gamma),
+        g$gamma[upper.tri(g$gamma)]))
 	}
 
-
-	simulate.gam.gsg<-function(mod){
-		sim.lin.pred<-predict(mod)
+	# for parametric bootstrap
+	simulate.gppr.gsg<-function(mod){
+		sim.lin.pred<-predict(mod,type='link')
 		s<-NULL
-		if(mod$family[[1]]=='poisson'&mod$family[[2]]=='log') {
+		if(mod$family[[1]]=='poisson'|mod$family[[1]]=='Poisson') {
 			s<-rpois(length(sim.lin.pred),exp(sim.lin.pred))
 		}
-		if(mod$family[[1]]=='binomial') {
+		if(mod$family[[1]]=='binomial'|mod$family[[1]]=='Binomial') {
 			s<-rbinom(length(sim.lin.pred),1,
 			                     inv.logit(sim.lin.pred))
 		}
-		if(strsplit(mod$family[[1]],split="\\(")[[1]][1]==
-		            'Negative Binomial') {
-			s<-rnbinom(length(sim.lin.pred),size=mod$family$getTheta(),
-			                     mu=exp(sim.lin.pred))
-		}
-		if(mod$family[[1]]=='gaussian') {
-			s<-rnorm(length(sim.lin.pred),
-			   sim.lin.pred,sqrt(mod$sig2))
-		}		
 		s
 	}
 
@@ -115,97 +92,53 @@ gam.gradients <- function(
 			# the parametric bootstrap part of the analysis
 			# done internally in this sub-function
 		
-    		d <- as.data.frame(data)
-    		d[[attr(attr(mod$terms,'factors'),
-    		            'dimnames')[[1]][1]]]<-simulate.gam.gsg(mod)
+    d <- as.data.frame(data)
+    d[,as.character(mod$y)]<-simulate.gppr.gsg(mod)
 
-    		mod.prime <- NULL
-    if(strsplit(mod$family[[1]],split="\\(")[[1]][1]==
-		            'Negative Binomial'){
-		if(refit.smooth){
-			theta<-mod$family$getTheta()
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=negbin(theta),
-        		start=mod$coefficients
-    		  )
-		}else{
-			theta<-mod$family$getTheta()
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=negbin(theta),
-        		start=mod$coefficients,
-        		sp=mod$sp
-    		  )
-    	}
-    }else{ #everything other than negbinom
-		if(refit.smooth){
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients
-    		  )
-		}else{
-		  mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients,
-        		sp=mod$sp
-    		  )
-    	}
-    }
-    	g <- gradients(mod.prime, phenotype, covariates)
+    mod.prime <- gppr(
+        y=mod$y,
+        xterms=mod$xterms,
+        data=d,
+        family=mod$family[[1]],
+        nterms=mod$nterms,
+        gcvpen=mod$gcvpen,
+        maxit=mod$maxit,
+        max.terms=mod$max.terms
+    )
+    
+    plot(mod.prime$ppr)
 
-    	return(c(g$beta,diag(g$gamma),
-    	                     g$gamma[upper.tri(g$gamma)]))
+    g <- gradients(mod.prime, phenotype, covariates)
+
+    return(c(g$beta,diag(g$gamma),
+        g$gamma[upper.tri(g$gamma)]))
 	}
-
 
 	permute.W.refit<-function(data, original, mod, 
 	                              phenotype, covariates){
 
-	    d <- as.data.frame(mod$model[,
-	         c(attr(attr(mod$terms,"factors"),"dimnames")[[1]][1],
-	         phenotype, covariates)])
-	    names(d)<-c(attr(attr(mod$terms,"factors"),"dimnames")[[1]][1],
-	         phenotype, covariates)
-	    
-	    d[ ,attr(attr(mod$terms,"factors"),
-	         "dimnames")[[1]][1] ] <- d[ sample(1:(dim(d)[1]),
-	         dim(d)[1],replace=FALSE) , attr(attr(mod$terms,"factors"),
-	         "dimnames")[[1]][1] ]
+    d <- mod$data[,c(mod$y,mod$ppr$xterms)]
+    d[,mod$gen$y] <- d[ sample(1:(dim(d)[1]),dim(d)[1]),
+	         	               mod$gen$y ]
 
-		mod.prime <- gam(
-        		as.formula(mod$formula),
-        		data=d,
-        		family=mod$family,
-        		start=mod$coefficients
-    		  )
-    p<-predict(mod.prime,type="response")
+    mod.prime <- gppr(
+        y=mod$y,
+        xterms=mod$xterms,
+        data=d,
+        family=mod$family[[1]],
+        nterms=mod$nterms,
+        gcvpen=mod$gcvpen,
+        maxit=mod$maxit,
+        max.terms=mod$max.terms
+    )
 
-    		g <- gradients(mod.prime, phenotype, covariates)
-    
-    		return(c(g$beta,diag(g$gamma),g$gamma[upper.tri(g$gamma)],var(p)))
+
+    p<- predict(mod.prime,type="response")
+    g <- gradients(mod.prime, phenotype, covariates)
+    return(c(g$beta,diag(g$gamma),
+            g$gamma[upper.tri(g$gamma)],var(p)))
 	}
 
-	posterior.sim.gradients<-function(m,n.boot, phenotype,covariates){
-    	nTraits <- length(phenotype)
-    	mu <- m$coefficients
-    	Vp <- m$Vp
-    	coef.boot <- rmvnorm(n.boot,mu,Vp)
-    	grads.boot <- array(dim=c(n.boot,2*nTraits+(nTraits^2-nTraits)/2))
-    	for (b in 1:n.boot) {
-      		mod.prime <- m
-      		m$coefficients <- coef.boot[b,]
-      		g <- gradients(mod.prime, phenotype, covariates)
-      		grads.boot[b,]<-c(g$beta,diag(g$gamma),g$gamma[upper.tri(g$gamma)])
-    	}
-    	return(grads.boot)
-	}
 
 	## end sub-functions for gam.gradients()	
 
@@ -213,9 +146,9 @@ gam.gradients <- function(
 	## some checks
 		
     cls <- class(mod)
-    rightType <- any(cls %in% c("gam"))
+    rightType <- any(cls %in% c("gppr"))
     if (!rightType) {
-        stop("Argument 'mod' must be a generalized additive model.")
+        stop("Argument 'mod' must be a generalized projection pursuit model.")
     }
     if (!is.character(phenotype)) {
         stop("Argument 'phenotype' must be a character vector of terms from the fitness model.")
@@ -224,7 +157,7 @@ gam.gradients <- function(
         stop("Argument 'standardized' must be logical.")
     }
     if (!is.character(se.method) ) {
-        stop("Argument 'se.method' must be character and one of 'boot.para', 'boot.case, 'posterior', 'permute', or 'n'.")
+        stop("Argument 'se.method' must be character and one of 'boot.para', 'boot.case, 'permute', or 'n'.")
     }
     if (!is.numeric(n.boot)) {
         stop("Argument 'n.boot' must be numeric.")
@@ -239,12 +172,11 @@ gam.gradients <- function(
         stop("Argument 'ncpus' must be numeric.")
     }
 
-    termLabels <- attr(x=terms(mod), which='term.labels')
+    termLabels <- attr(x=terms(mod$ppr), which='term.labels')
     nTerms <- length(termLabels)
     if (!all(phenotype %in% termLabels)) {
         stop("Some selected phenotypes not included in the model.")
     }
-
 
     nTraits<-length(phenotype)
 
@@ -253,31 +185,25 @@ gam.gradients <- function(
     g <- gradients(mod, phenotype,covariates)
     ests$estimates<-c(g$beta,diag(g$gamma),g$gamma[upper.tri(g$gamma)])
 
+
     # Calculate standard errors
-    if (se.method %in% c('posterior','boot.case','boot.para')) {
+    if (se.method %in% c('boot.case','boot.para')) {
         boot.res<-NULL
         cat(paste("Calculating bootstrap standard errors..."))
         flush.console();
         
         
-        ## MVN simulation from the Bayesian approximation to the 
-        ## posterior dsitribution of the model parameters
-        
-        if (se.method=='posterior') {
-            boot.res <- posterior.sim.gradients(mod, n.boot, 
-                                      phenotype,covariates)
-            cat(paste("done.",'\n')); flush.console();
 
 
 	   ## case bootstrapping
 
-        } else if (se.method == 'boot.case') {
+        if (se.method == 'boot.case') {
             boot.rep.1 <- min(100,n.boot)
  
              a<-Sys.time()
             ttc <- system.time(
                 boot.res.1 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = boot.gradients,
                     R = boot.rep.1,
                     parallel = parallel,
@@ -298,14 +224,13 @@ gam.gradients <- function(
                              b+(b-a)/100*(n.boot-100),"..."
                                            )); flush.console();
                 boot.res.2 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = boot.gradients,
                     R = n.boot-100,
                     parallel = parallel,
                     ncpus = ncpus,
                     mod = mod,
-                    phenotype = phenotype,
-                    covariates = covariates)
+                    phenotype = phenotype)
                 boot.res <- rbind(boot.res.1$t,boot.res.2$t)
             }
             cat(paste("done.",'\n')); flush.console();
@@ -317,14 +242,13 @@ gam.gradients <- function(
             a<-Sys.time()
             ttc <- system.time(
                 boot.res.1 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = boot.gradients.para,
                     R = boot.rep.1,
                     parallel = parallel,
                     ncpus = ncpus,
                     mod = mod,
-                    phenotype=phenotype,
-                    covariates=covariates
+                    phenotype=phenotype,covariates=covariates
                 )
             )
             b<-Sys.time()
@@ -338,14 +262,13 @@ gam.gradients <- function(
                             b+(b-a)/100*(n.boot-100),"..."
                                                  )); flush.console();
                 boot.res.2 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = boot.gradients.para,
                     R = n.boot-100,
                     parallel = parallel,
                     ncpus = ncpus,
                     mod = mod,
-                    phenotype = phenotype,
-                    covariates=covariates
+                    phenotype = phenotype,covariates=covariates
                 )
                 boot.res <- rbind(boot.res.1$t,boot.res.2$t)
             }
@@ -382,7 +305,7 @@ gam.gradients <- function(
             a<-Sys.time()
             ttc <- system.time(
                 perm.res.1 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = permute.W.refit,
                     R = boot.rep.1,
                     parallel = parallel,
@@ -403,7 +326,7 @@ gam.gradients <- function(
                                b+(b-a)/100*(n.boot-100),"..."
                                             )); flush.console();
                 perm.res.2 <- boot(
-                    data = mod$model,
+                    data = mod$data,
                     statistic = permute.W.refit,
                     R = n.boot-100,
                     parallel = parallel,
@@ -457,3 +380,5 @@ gam.gradients <- function(
     
     res
 }
+
+
